@@ -1,0 +1,19 @@
+{
+  "name": "simple-wm-applier",
+  "version": "1.0.0",
+  "description": "Bulk watermark/border applier using Sharp",
+  "type": "module",
+  "scripts": {
+    "apply": "bun run src/apply-watermark.ts",
+    "dev": "bun run src/server.ts"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "sharp": "^0.33.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "bun-types": "^1.3.10",
+    "typescript": "^5.3.3"
+  }
+}
