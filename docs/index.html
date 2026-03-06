@@ -8,7 +8,9 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400;1,700&family=Montserrat:ital,wght@0,400;0,700;0,800;0,900;1,400;1,700&family=Oswald:wght@400;500;600;700&family=Bebas+Neue&family=Anton&family=Permanent+Marker&family=Bangers&family=Righteous&family=Fredoka+One&family=Luckiest+Guy&family=Passion+One:wght@400;700;900&family=Russo+One&family=Black+Ops+One&family=Bungee&family=Lilita+One&family=Fugaz+One&family=Pacifico&family=Lobster&family=Satisfy&family=Dancing+Script:wght@400;700&family=Caveat:wght@400;700&family=Press+Start+2P&family=Silkscreen&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Archivo+Black&display=swap"
+    rel="stylesheet">
 </head>
 
 <body>
@@ -162,6 +164,11 @@
             <option value="retro">Retro / Vintage</option>
             <option value="metallic">Metallic</option>
             <option value="stamp">Rubber Stamp</option>
+            <option value="outline">Outline Only</option>
+            <option value="comic">Comic / Pop Art</option>
+            <option value="luxury">Luxury / Gold</option>
+            <option value="grunge">Grunge / Distressed</option>
+            <option value="pastel">Soft Pastel</option>
           </select>
         </section>
 
@@ -256,6 +263,20 @@
           </div>
           <div class="badge-presets" id="badge-presets"></div>
           <div class="badge-list" id="badge-list"></div>
+          <div class="typo-controls">
+            <label class="typo-label">Font</label>
+            <select class="style-select typo-font-select" id="cr-badge-font"></select>
+            <div class="typo-row">
+              <div class="typo-toggles">
+                <button class="typo-toggle active" id="cr-badge-bold" title="Bold"><b>B</b></button>
+                <button class="typo-toggle" id="cr-badge-italic" title="Italic"><i>I</i></button>
+              </div>
+              <div class="typo-size">
+                <label>Size <span id="cr-badge-size-val">18</span>px</label>
+                <input type="range" id="cr-badge-size" min="10" max="36" value="18">
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Store Name -->
@@ -264,6 +285,20 @@
             <h2>Store Name (optional)</h2>
           </div>
           <input type="text" id="cr-store-name" placeholder="e.g. MyStore" class="text-input">
+          <div class="typo-controls">
+            <label class="typo-label">Font</label>
+            <select class="style-select typo-font-select" id="cr-store-font"></select>
+            <div class="typo-row">
+              <div class="typo-toggles">
+                <button class="typo-toggle active" id="cr-store-bold" title="Bold"><b>B</b></button>
+                <button class="typo-toggle" id="cr-store-italic" title="Italic"><i>I</i></button>
+              </div>
+              <div class="typo-size">
+                <label>Size <span id="cr-store-size-val">20</span>px</label>
+                <input type="range" id="cr-store-size" min="12" max="42" value="20">
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Export -->

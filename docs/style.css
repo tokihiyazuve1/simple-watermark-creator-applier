@@ -891,6 +891,86 @@ body {
   border-color: var(--accent);
 }
 
+/* ===== Creator: Typography Controls ===== */
+.typo-controls {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.typo-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.typo-font-select {
+  margin-bottom: 6px;
+  padding: 5px 8px !important;
+  font-size: 12px !important;
+}
+
+.typo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typo-toggles {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.typo-toggle {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: 'Inter', serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.typo-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--text-dim);
+}
+
+.typo-toggle.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.typo-size {
+  flex: 1;
+  min-width: 0;
+}
+
+.typo-size label {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+  display: block;
+}
+
+.typo-size input[type="range"] {
+  width: 100%;
+}
+
 .badge-remove {
   width: 20px;
   height: 20px;
