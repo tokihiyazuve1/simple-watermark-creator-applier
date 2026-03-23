@@ -1888,10 +1888,6 @@ document.addEventListener('keydown', e => {
 const imageUploadInput = document.getElementById('image-upload');
 const imageListEl = document.getElementById('image-list');
 
-document.getElementById('btn-add-image').addEventListener('click', () => {
-    imageUploadInput.click();
-});
-
 imageUploadInput.addEventListener('change', e => {
     Array.from(e.target.files).forEach(file => {
         const reader = new FileReader();
