@@ -106,7 +106,88 @@ const creator = {
     diagSize: 32,
     diagAngle: -45,
     diagColor: '#ffffff',
+    // Badge shape
+    badgeShape: 'rounded',
 };
+
+// Snap guides (drawn during drag)
+let snapGuides = [];
+const SNAP_THRESHOLD = 8;
+
+// Undo/Redo history
+const undoStack = [];
+const redoStack = [];
+const MAX_HISTORY = 50;
+
+function getCreatorSnapshot() {
+    // Deep clone only serializable state (excludes qrImage, images with el)
+    const snap = JSON.parse(JSON.stringify(creator, (key, val) => {
+        if (key === 'el' || key === 'qrImage') return undefined;
+        return val;
+    }));
+    return snap;
+}
+
+function pushUndo() {
+    undoStack.push(getCreatorSnapshot());
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+}
+
+function applySnapshot(snap) {
+    Object.keys(snap).forEach(k => {
+        if (k === 'images') {
+            // Restore images but keep their el references
+            snap.images.forEach((si, i) => {
+                if (creator.images[i]) {
+                    Object.assign(creator.images[i], si);
+                }
+            });
+            // Remove extra images
+            creator.images.length = snap.images.length;
+        } else if (k !== 'qrImage') {
+            creator[k] = snap[k];
+        }
+    });
+    // Regenerate QR if URL exists
+    if (creator.qrUrl) generateQR(); else { creator.qrImage = null; }
+    syncUIFromState();
+    render();
+}
+
+function syncUIFromState() {
+    color1Input.value = creator.color1;
+    color2Input.value = creator.color2;
+    accentInput.value = creator.accent;
+    thicknessInput.value = creator.thickness;
+    thicknessVal.textContent = creator.thickness;
+    storeNameInput.value = creator.storeName;
+    // Badge shape
+    const shapeEl = document.getElementById('cr-badge-shape');
+    if (shapeEl) shapeEl.value = creator.badgeShape || 'rounded';
+    // QR
+    const qrEl = document.getElementById('cr-qr-url');
+    if (qrEl) qrEl.value = creator.qrUrl || '';
+    const qrSzEl = document.getElementById('cr-qr-size');
+    if (qrSzEl) { qrSzEl.value = creator.qrSize; document.getElementById('cr-qr-size-val').textContent = creator.qrSize; }
+    const qrFgEl = document.getElementById('cr-qr-fg');
+    if (qrFgEl) qrFgEl.value = creator.qrFg;
+    const qrBgEl = document.getElementById('cr-qr-bg');
+    if (qrBgEl) qrBgEl.value = creator.qrBg;
+    // Diagonal text
+    const dtEl = document.getElementById('cr-diag-text');
+    if (dtEl) dtEl.value = creator.diagText || '';
+    const doEl = document.getElementById('cr-diag-opacity');
+    if (doEl) { doEl.value = creator.diagOpacity; document.getElementById('cr-diag-opacity-val').textContent = creator.diagOpacity; }
+    const dsEl = document.getElementById('cr-diag-size');
+    if (dsEl) { dsEl.value = creator.diagSize; document.getElementById('cr-diag-size-val').textContent = creator.diagSize; }
+    const daEl = document.getElementById('cr-diag-angle');
+    if (daEl) daEl.value = creator.diagAngle;
+    const dcEl = document.getElementById('cr-diag-color');
+    if (dcEl) dcEl.value = creator.diagColor;
+    renderBadgeControls();
+    renderImageList();
+}
 
 const POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'bottom-center', 'top-center'];
 
@@ -265,13 +346,44 @@ storeItalicBtn.addEventListener('click', () => {
 });
 
 // Export
+const exportFormatSelect = document.getElementById('cr-export-format');
+const exportQualityInput = document.getElementById('cr-export-quality');
+const exportQualityVal = document.getElementById('cr-export-quality-val');
+const qualityWrap = document.getElementById('cr-quality-wrap');
+
+exportFormatSelect.addEventListener('change', () => {
+    const fmt = exportFormatSelect.value;
+    if (fmt === 'png') {
+        qualityWrap.hidden = true;
+    } else {
+        qualityWrap.hidden = false;
+        qualityWrap.style.display = 'flex';
+    }
+});
+
+exportQualityInput.addEventListener('input', () => {
+    exportQualityVal.textContent = exportQualityInput.value + '%';
+});
+
 btnExport.addEventListener('click', () => {
+    const fmt = exportFormatSelect.value;
+    const quality = parseInt(exportQualityInput.value) / 100;
+    const mimeTypes = { png: 'image/png', jpeg: 'image/jpeg', webp: 'image/webp' };
+    const exts = { png: '.png', jpeg: '.jpg', webp: '.webp' };
+    const mime = mimeTypes[fmt];
+    const ext = exts[fmt];
+
     const link = document.createElement('a');
-    const name = creator.storeName
-        ? creator.storeName.toLowerCase().replace(/\s+/g, '_') + '_watermark.png'
-        : 'watermark.png';
-    link.download = name;
-    link.href = canvas.toDataURL('image/png');
+    const baseName = creator.storeName
+        ? creator.storeName.toLowerCase().replace(/\s+/g, '_') + '_watermark'
+        : 'watermark';
+    link.download = baseName + ext;
+
+    if (fmt === 'png') {
+        link.href = canvas.toDataURL(mime);
+    } else {
+        link.href = canvas.toDataURL(mime, quality);
+    }
     link.click();
 });
 
@@ -656,6 +768,22 @@ function render() {
             ctx.setLineDash([]);
             ctx.restore();
         }
+    }
+
+    // Draw snap guides
+    if (snapGuides.length > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        snapGuides.forEach(g => {
+            ctx.beginPath();
+            if (g.axis === 'v') { ctx.moveTo(g.pos, 0); ctx.lineTo(g.pos, SIZE); }
+            else { ctx.moveTo(0, g.pos); ctx.lineTo(SIZE, g.pos); }
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+        ctx.restore();
     }
 }
 
@@ -1687,7 +1815,10 @@ function drawRibbon(t, fill, accent) {
 function drawCustomImages() {
     creator.images.forEach(img => {
         if (!img.el) return;
+        ctx.save();
+        ctx.globalAlpha = (img.opacity !== undefined ? img.opacity : 100) / 100;
         ctx.drawImage(img.el, img.x, img.y, img.w, img.h);
+        ctx.restore();
     });
 }
 
@@ -1706,8 +1837,18 @@ function drawBadgeAt(text, bgColor, bx, by) {
     ctx.font = getBadgeFont();
     const metrics = ctx.measureText(text);
     const pad = fontSize * 0.7;
-    const w = metrics.width + pad * 2;
-    const h = fontSize * 2.1;
+    const shape = creator.badgeShape || 'rounded';
+
+    let w, h;
+    if (shape === 'circle') {
+        const diameter = Math.max(metrics.width + pad, fontSize * 2.8);
+        w = diameter; h = diameter;
+    } else {
+        w = metrics.width + pad * 2;
+        h = fontSize * 2.1;
+    }
+    if (shape === 'ribbon') { w += h * 0.4; }
+
     const r = fx.badgeRadius;
 
     ctx.save();
@@ -1724,7 +1865,38 @@ function drawBadgeAt(text, bgColor, bx, by) {
     const effectiveBg = fx.pastelSoften ? lightenColor(bgColor, 0.35) : bgColor;
     ctx.globalAlpha = fx.badgeBgAlpha;
     ctx.fillStyle = effectiveBg;
-    roundRect(ctx, bx, by, w, h, r);
+
+    if (shape === 'pill') {
+        const pr = h / 2;
+        roundRect(ctx, bx, by, w, h, pr);
+    } else if (shape === 'circle') {
+        ctx.beginPath();
+        ctx.arc(bx + w / 2, by + h / 2, w / 2, 0, Math.PI * 2);
+        ctx.closePath();
+    } else if (shape === 'ribbon') {
+        const notch = h * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(bx + notch, by);
+        ctx.lineTo(bx + w - notch, by);
+        ctx.lineTo(bx + w, by + h / 2);
+        ctx.lineTo(bx + w - notch, by + h);
+        ctx.lineTo(bx + notch, by + h);
+        ctx.lineTo(bx, by + h / 2);
+        ctx.closePath();
+    } else if (shape === 'hexagon') {
+        const cx0 = bx + w / 2, cy0 = by + h / 2;
+        const rx = w / 2, ry = h / 2;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.PI / 3 * i - Math.PI / 6;
+            const px = cx0 + rx * Math.cos(angle);
+            const py = cy0 + ry * Math.sin(angle);
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+    } else {
+        roundRect(ctx, bx, by, w, h, r);
+    }
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.shadowColor = 'transparent';
@@ -1733,7 +1905,15 @@ function drawBadgeAt(text, bgColor, bx, by) {
     if (fx.badgeOutline) {
         ctx.strokeStyle = fx.badgeOutline.color;
         ctx.lineWidth = fx.badgeOutline.width;
-        roundRect(ctx, bx, by, w, h, r);
+        if (shape === 'pill') {
+            roundRect(ctx, bx, by, w, h, h / 2);
+        } else if (shape === 'circle') {
+            ctx.beginPath(); ctx.arc(bx + w / 2, by + h / 2, w / 2, 0, Math.PI * 2); ctx.closePath();
+        } else if (shape === 'ribbon' || shape === 'hexagon') {
+            // Path already set from fill, just stroke again
+        } else {
+            roundRect(ctx, bx, by, w, h, r);
+        }
         ctx.stroke();
     }
 
@@ -1979,6 +2159,7 @@ canvas.addEventListener('mousedown', e => {
     const { x, y } = canvasToLogical(e);
     const hit = getHitTarget(x, y);
     if (hit) {
+        pushUndo(); // Save state before drag
         dragTarget = hit;
         selectedElement = hit;
         dragOffsetX = x - hit.obj.x;
@@ -1994,8 +2175,67 @@ canvas.addEventListener('mousedown', e => {
 canvas.addEventListener('mousemove', e => {
     const { x, y } = canvasToLogical(e);
     if (dragTarget) {
-        const nx = x - dragOffsetX;
-        const ny = y - dragOffsetY;
+        let nx = x - dragOffsetX;
+        let ny = y - dragOffsetY;
+
+        // Calculate element dimensions for snap
+        let ew = 0, eh = 0;
+        if (dragTarget.type === 'badge') {
+            ctx.font = getBadgeFont();
+            const b = creator.badges[dragTarget.index];
+            const label = b.emoji ? `${b.emoji} ${b.text}` : b.text;
+            const pad = creator.badgeSize * 0.7;
+            ew = ctx.measureText(label).width + pad * 2;
+            eh = creator.badgeSize * 2.1;
+        } else if (dragTarget.type === 'image') {
+            const img = creator.images[dragTarget.index];
+            ew = img.w; eh = img.h;
+        } else if (dragTarget.type === 'storeName') {
+            ctx.font = getStoreFont();
+            const text = creator.storeName.toUpperCase();
+            const pad = creator.storeSize * 0.9;
+            ew = ctx.measureText(text).width + pad * 2;
+            eh = creator.storeSize * 1.7;
+        } else if (dragTarget.type === 'qr') {
+            ew = creator.qrSize; eh = creator.qrSize;
+        }
+
+        // Snap logic
+        snapGuides = [];
+        const cx = nx + ew / 2, cy = ny + eh / 2;
+        const mid = SIZE / 2;
+
+        // Snap to center X
+        if (Math.abs(cx - mid) < SNAP_THRESHOLD) {
+            nx = mid - ew / 2;
+            snapGuides.push({ axis: 'v', pos: mid });
+        }
+        // Snap to center Y
+        if (Math.abs(cy - mid) < SNAP_THRESHOLD) {
+            ny = mid - eh / 2;
+            snapGuides.push({ axis: 'h', pos: mid });
+        }
+        // Snap left edge to 0
+        if (Math.abs(nx) < SNAP_THRESHOLD) {
+            nx = 0;
+            snapGuides.push({ axis: 'v', pos: 0 });
+        }
+        // Snap right edge to SIZE
+        if (Math.abs(nx + ew - SIZE) < SNAP_THRESHOLD) {
+            nx = SIZE - ew;
+            snapGuides.push({ axis: 'v', pos: SIZE });
+        }
+        // Snap top edge to 0
+        if (Math.abs(ny) < SNAP_THRESHOLD) {
+            ny = 0;
+            snapGuides.push({ axis: 'h', pos: 0 });
+        }
+        // Snap bottom edge to SIZE
+        if (Math.abs(ny + eh - SIZE) < SNAP_THRESHOLD) {
+            ny = SIZE - eh;
+            snapGuides.push({ axis: 'h', pos: SIZE });
+        }
+
         if (dragTarget.type === 'badge') {
             creator.badges[dragTarget.index].x = nx;
             creator.badges[dragTarget.index].y = ny;
@@ -2018,20 +2258,44 @@ canvas.addEventListener('mousemove', e => {
 canvas.addEventListener('mouseup', () => {
     if (dragTarget) {
         dragTarget = null;
+        snapGuides = [];
         canvas.style.cursor = 'grab';
+        render();
     }
 });
 
 canvas.addEventListener('mouseleave', () => {
-    if (dragTarget) { dragTarget = null; canvas.style.cursor = 'default'; }
+    if (dragTarget) { dragTarget = null; snapGuides = []; canvas.style.cursor = 'default'; render(); }
 });
 
-// Delete key to remove selected element
+// Keyboard: Delete + Undo/Redo
 document.addEventListener('keydown', e => {
+    // Don't intercept if typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+    // Undo: Ctrl+Z
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        if (undoStack.length > 0) {
+            redoStack.push(getCreatorSnapshot());
+            applySnapshot(undoStack.pop());
+        }
+        e.preventDefault();
+        return;
+    }
+    // Redo: Ctrl+Y or Ctrl+Shift+Z
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey) || (e.key === 'Z'))) {
+        if (redoStack.length > 0) {
+            undoStack.push(getCreatorSnapshot());
+            applySnapshot(redoStack.pop());
+        }
+        e.preventDefault();
+        return;
+    }
+
+    // Delete selected element
     if (!selectedElement) return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Don't intercept if typing in an input
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+        pushUndo();
         if (selectedElement.type === 'badge') {
             creator.badges.splice(selectedElement.index, 1);
             renderBadgeControls();
@@ -2066,7 +2330,7 @@ imageUploadInput.addEventListener('change', e => {
                 let w = img.width, h = img.height;
                 if (w > h) { h = (h / w) * maxDim; w = maxDim; }
                 else { w = (w / h) * maxDim; h = maxDim; }
-                creator.images.push({ el: img, x: SIZE / 2 - w / 2, y: SIZE / 2 - h / 2, w, h, baseW: w, baseH: h, scale: 100, name: file.name });
+                creator.images.push({ el: img, x: SIZE / 2 - w / 2, y: SIZE / 2 - h / 2, w, h, baseW: w, baseH: h, scale: 100, opacity: 100, name: file.name, src: ev.target.result });
                 renderImageList();
                 render();
             };
@@ -2088,7 +2352,15 @@ function renderImageList() {
                 <span class="img-scale-val" style="font-size:10px;color:var(--text-muted);min-width:32px;text-align:right">${img.scale}%</span>
                 <button class="badge-remove img-del" title="Remove">✕</button>
             </div>
-            <input type="range" class="img-scale" min="10" max="500" value="${img.scale}" style="width:100%;accent-color:var(--primary)">
+            <div style="display:flex;align-items:center;gap:4px">
+                <span style="font-size:10px;color:var(--text-muted);min-width:30px">Size</span>
+                <input type="range" class="img-scale" min="10" max="500" value="${img.scale}" style="flex:1;accent-color:var(--primary)">
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">
+                <span style="font-size:10px;color:var(--text-muted);min-width:30px">Op.</span>
+                <input type="range" class="img-opacity" min="5" max="100" value="${img.opacity !== undefined ? img.opacity : 100}" style="flex:1;accent-color:var(--primary)">
+                <span class="img-opacity-val" style="font-size:10px;color:var(--text-muted);min-width:25px;text-align:right">${img.opacity !== undefined ? img.opacity : 100}%</span>
+            </div>
         `;
         row.querySelector('.img-scale').addEventListener('input', e => {
             const s = parseInt(e.target.value);
@@ -2098,10 +2370,161 @@ function renderImageList() {
             row.querySelector('.img-scale-val').textContent = s + '%';
             render();
         });
+        row.querySelector('.img-opacity').addEventListener('input', e => {
+            const o = parseInt(e.target.value);
+            creator.images[i].opacity = o;
+            row.querySelector('.img-opacity-val').textContent = o + '%';
+            render();
+        });
         row.querySelector('.img-del').addEventListener('click', () => { creator.images.splice(i, 1); renderImageList(); render(); });
         imageListEl.appendChild(row);
     });
 }
+
+// ===== Templates =====
+const TEMPLATES_KEY = 'wm-creator-templates';
+const tplNameInput = document.getElementById('cr-tpl-name');
+const tplList = document.getElementById('cr-tpl-list');
+
+function getTemplates() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '{}'); }
+    catch { return {}; }
+}
+
+function saveTemplates(tpls) {
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(tpls));
+}
+
+function refreshTemplateList() {
+    const tpls = getTemplates();
+    tplList.innerHTML = '<option value="">— Select template —</option>';
+    Object.keys(tpls).sort().forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        tplList.appendChild(opt);
+    });
+}
+refreshTemplateList();
+
+function getTemplateSnapshot() {
+    return JSON.parse(JSON.stringify(creator, (key, val) => {
+        if (key === 'el' || key === 'qrImage') return undefined;
+        return val;
+    }));
+}
+
+document.getElementById('btn-tpl-save').addEventListener('click', () => {
+    const name = tplNameInput.value.trim();
+    if (!name) { alert('Enter a template name'); return; }
+    const tpls = getTemplates();
+    tpls[name] = getTemplateSnapshot();
+    saveTemplates(tpls);
+    refreshTemplateList();
+    tplList.value = name;
+    tplNameInput.value = '';
+});
+
+document.getElementById('btn-tpl-load').addEventListener('click', () => {
+    const name = tplList.value;
+    if (!name) { alert('Select a template first'); return; }
+    const tpls = getTemplates();
+    if (!tpls[name]) return;
+    pushUndo();
+    const snap = tpls[name];
+    // Restore images with their src data
+    if (snap.images && snap.images.length > 0) {
+        creator.images = [];
+        let loaded = 0;
+        snap.images.forEach((si, idx) => {
+            if (si.src) {
+                const img = new Image();
+                img.onload = () => {
+                    creator.images[idx] = { ...si, el: img };
+                    loaded++;
+                    if (loaded === snap.images.length) {
+                        Object.keys(snap).forEach(k => { if (k !== 'images' && k !== 'qrImage') creator[k] = snap[k]; });
+                        if (creator.qrUrl) generateQR(); else creator.qrImage = null;
+                        syncUIFromState();
+                        render();
+                    }
+                };
+                img.src = si.src;
+            } else {
+                creator.images[idx] = si;
+                loaded++;
+            }
+        });
+    } else {
+        Object.keys(snap).forEach(k => { if (k !== 'qrImage') creator[k] = snap[k]; });
+        creator.images = [];
+        if (creator.qrUrl) generateQR(); else creator.qrImage = null;
+        syncUIFromState();
+        render();
+    }
+});
+
+document.getElementById('btn-tpl-delete').addEventListener('click', () => {
+    const name = tplList.value;
+    if (!name) return;
+    if (!confirm(`Delete template "${name}"?`)) return;
+    const tpls = getTemplates();
+    delete tpls[name];
+    saveTemplates(tpls);
+    refreshTemplateList();
+});
+
+document.getElementById('btn-tpl-export').addEventListener('click', () => {
+    const snap = getTemplateSnapshot();
+    const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.download = `watermark-template-${Date.now()}.json`;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+});
+
+document.getElementById('tpl-import').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        try {
+            const snap = JSON.parse(ev.target.result);
+            pushUndo();
+            if (snap.images && snap.images.length > 0) {
+                creator.images = [];
+                let loaded = 0;
+                snap.images.forEach((si, idx) => {
+                    if (si.src) {
+                        const img = new Image();
+                        img.onload = () => {
+                            creator.images[idx] = { ...si, el: img };
+                            loaded++;
+                            if (loaded === snap.images.length) {
+                                Object.keys(snap).forEach(k => { if (k !== 'images' && k !== 'qrImage') creator[k] = snap[k]; });
+                                if (creator.qrUrl) generateQR(); else creator.qrImage = null;
+                                syncUIFromState();
+                                render();
+                            }
+                        };
+                        img.src = si.src;
+                    } else {
+                        creator.images[idx] = si;
+                        loaded++;
+                    }
+                });
+            } else {
+                Object.keys(snap).forEach(k => { if (k !== 'qrImage') creator[k] = snap[k]; });
+                creator.images = [];
+                if (creator.qrUrl) generateQR(); else creator.qrImage = null;
+                syncUIFromState();
+                render();
+            }
+        } catch (err) { alert('Invalid template file'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+});
 
 // ===== QR Code Controls =====
 const qrUrlInput = document.getElementById('cr-qr-url');
@@ -2146,6 +2569,13 @@ diagSizeInput.addEventListener('input', e => {
 });
 diagAngleSelect.addEventListener('change', e => { creator.diagAngle = parseInt(e.target.value); render(); });
 diagColorInput.addEventListener('input', e => { creator.diagColor = e.target.value; render(); });
+
+// Badge shape
+document.getElementById('cr-badge-shape').addEventListener('change', e => {
+    pushUndo();
+    creator.badgeShape = e.target.value;
+    render();
+});
 
 // Initial render
 render();

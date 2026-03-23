@@ -1,10 +1,31 @@
-// ===== State =====
 const state = {
     images: [],       // { file: File, url: string, relativePath: string }
     watermarks: [],   // { file: File, url: string }
     selectedImage: null,
     selectedWatermark: null,
 };
+
+// Output format toggle
+const outputFormatSelect = document.getElementById('output-format');
+const outputQualityInput = document.getElementById('output-quality');
+const outputQualityVal = document.getElementById('output-quality-val');
+const outputQualityWrap = document.getElementById('output-quality-wrap');
+
+if (outputFormatSelect) {
+    outputFormatSelect.addEventListener('change', () => {
+        if (outputFormatSelect.value === 'png') {
+            outputQualityWrap.hidden = true;
+        } else {
+            outputQualityWrap.hidden = false;
+            outputQualityWrap.style.display = 'flex';
+        }
+    });
+}
+if (outputQualityInput) {
+    outputQualityInput.addEventListener('input', () => {
+        outputQualityVal.textContent = outputQualityInput.value + '%';
+    });
+}
 
 // ===== DOM Refs =====
 const $ = (sel) => document.querySelector(sel);
@@ -170,6 +191,11 @@ async function updatePreview() {
         const formData = new FormData();
         formData.append('image', state.images[state.selectedImage].file);
         formData.append('watermark', state.watermarks[state.selectedWatermark].file);
+        const resizeEnabled = document.getElementById('resize-enable').checked;
+        const minSize = parseInt(document.getElementById('resize-min').value) || 1000;
+        if (resizeEnabled) formData.append('minSize', String(minSize));
+        if (outputFormatSelect) formData.append('outputFormat', outputFormatSelect.value);
+        if (outputQualityInput) formData.append('outputQuality', outputQualityInput.value);
 
         const res = await fetch('/api/preview', {
             method: 'POST',
@@ -209,6 +235,15 @@ async function processAndDownload() {
     state.watermarks.forEach((wm, i) => {
         formData.append(`watermarks_${i}`, wm.file);
     });
+
+    // Send resize options
+    const resizeEnabled = document.getElementById('resize-enable').checked;
+    const minSize = parseInt(document.getElementById('resize-min').value) || 1000;
+    if (resizeEnabled) {
+        formData.append('minSize', String(minSize));
+    }
+    if (outputFormatSelect) formData.append('outputFormat', outputFormatSelect.value);
+    if (outputQualityInput) formData.append('outputQuality', outputQualityInput.value);
 
     // Show progress
     progressSection.hidden = false;

@@ -1,6 +1,6 @@
 {
   "name": "simple-wm-applier",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "Bulk watermark/border applier using Sharp",
   "type": "module",
   "scripts": {

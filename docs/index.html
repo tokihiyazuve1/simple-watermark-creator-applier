@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Watermark Applier</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -31,7 +31,7 @@
         <button class="tab-btn active" data-tab="applier">Applier</button>
         <button class="tab-btn" data-tab="creator">Creator</button>
       </div>
-      <span class="header-badge">v1.3.0</span>
+      <span class="header-badge">v1.4.0</span>
     </header>
 
     <!-- ==================== APPLIER TAB ==================== -->
@@ -101,7 +101,32 @@
           <div class="thumbnail-list" id="watermark-list"></div>
         </section>
 
-        <!-- Process Button -->
+        <!-- Process Button -->        <!-- Resize Options -->
+        <section class="section" style="padding:10px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <input type="checkbox" id="resize-enable" checked>
+            <label for="resize-enable" style="font-size:12px;font-weight:600;color:var(--text-primary);cursor:pointer">Minimum Image Size</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px" id="resize-controls">
+            <input type="number" id="resize-min" value="1000" min="100" max="10000" step="100"
+              style="width:80px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:12px">
+            <span style="font-size:11px;color:var(--text-muted)">px — smaller images upscaled, larger images keep original size</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+            <label style="font-size:11px;color:var(--text-muted)">Output</label>
+            <select id="output-format" class="style-select" style="width:80px;padding:3px 4px;font-size:11px">
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+            <div id="output-quality-wrap" style="flex:1;align-items:center;gap:4px" hidden>
+              <label style="font-size:11px;color:var(--text-muted)">Quality</label>
+              <input type="range" id="output-quality" min="10" max="100" value="85" style="flex:1;accent-color:var(--primary)">
+              <span id="output-quality-val" style="font-size:11px;color:var(--text-muted);min-width:28px">85%</span>
+            </div>
+          </div>
+        </section>
+
         <button class="btn-process" id="btn-process" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -499,6 +524,16 @@
                 <input type="range" id="cr-badge-size" min="10" max="36" value="18">
               </div>
             </div>
+            <div style="margin-top:6px">
+              <label style="font-size:11px;color:var(--text-muted)">Shape</label>
+              <select id="cr-badge-shape" class="style-select" style="width:100%;margin-top:2px">
+                <option value="rounded">Rounded</option>
+                <option value="pill">Pill</option>
+                <option value="circle">Circle</option>
+                <option value="ribbon">Ribbon</option>
+                <option value="hexagon">Hexagon</option>
+              </select>
+            </div>
           </div>
         </section>
 
@@ -593,7 +628,47 @@
           </div>
         </section>
 
+        <!-- Templates -->
+        <section class="section">
+          <div class="section-header">
+            <h2>Templates</h2>
+          </div>
+          <div style="display:flex;gap:4px;margin-bottom:6px">
+            <input type="text" id="cr-tpl-name" class="badge-text-input" placeholder="Template name" style="flex:1">
+            <button class="btn-add" id="btn-tpl-save" title="Save current config as template">💾 Save</button>
+          </div>
+          <select id="cr-tpl-list" class="style-select" style="width:100%;margin-bottom:6px">
+            <option value="">— Select template —</option>
+          </select>
+          <div style="display:flex;gap:4px;margin-bottom:6px">
+            <button class="btn-add" id="btn-tpl-load" style="flex:1">📂 Load</button>
+            <button class="btn-add" id="btn-tpl-delete" style="flex:1;background:#e63946">🗑 Delete</button>
+          </div>
+          <div style="display:flex;gap:4px">
+            <button class="btn-add" id="btn-tpl-export" style="flex:1">⬇ Export JSON</button>
+            <label class="btn-add" style="flex:1;cursor:pointer;text-align:center">
+              ⬆ Import JSON
+              <input type="file" id="tpl-import" accept=".json" hidden>
+            </label>
+          </div>
+        </section>
+
         <!-- Export -->
+        <section class="section" style="padding:10px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <label style="font-size:11px;color:var(--text-muted)">Format</label>
+            <select id="cr-export-format" class="style-select" style="width:100px">
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+            <div id="cr-quality-wrap" style="flex:1;align-items:center;gap:4px" hidden>
+              <label style="font-size:11px;color:var(--text-muted)">Quality</label>
+              <input type="range" id="cr-export-quality" min="10" max="100" value="85" style="flex:1;accent-color:var(--primary)">
+              <span id="cr-export-quality-val" style="font-size:11px;color:var(--text-muted);min-width:28px">85%</span>
+            </div>
+          </div>
+        </section>
         <button class="btn-process" id="btn-export">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -601,7 +676,7 @@
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          Export as PNG
+          Export Image
         </button>
       </div>
 
@@ -617,9 +692,8 @@
     </main>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="app.js"></script>
-  <script src="creator.js"></script>
+  <script src="/app.js"></script>
+  <script src="/creator.js"></script>
   <script>
     // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {

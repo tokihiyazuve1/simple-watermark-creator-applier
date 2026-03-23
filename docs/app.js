@@ -1,10 +1,31 @@
-// ===== State =====
 const state = {
     images: [],       // { file: File, url: string, relativePath: string }
     watermarks: [],   // { file: File, url: string }
     selectedImage: null,
     selectedWatermark: null,
 };
+
+// Output format toggle
+const outputFormatSelect = document.getElementById('output-format');
+const outputQualityInput = document.getElementById('output-quality');
+const outputQualityVal = document.getElementById('output-quality-val');
+const outputQualityWrap = document.getElementById('output-quality-wrap');
+
+if (outputFormatSelect) {
+    outputFormatSelect.addEventListener('change', () => {
+        if (outputFormatSelect.value === 'png') {
+            outputQualityWrap.hidden = true;
+        } else {
+            outputQualityWrap.hidden = false;
+            outputQualityWrap.style.display = 'flex';
+        }
+    });
+}
+if (outputQualityInput) {
+    outputQualityInput.addEventListener('input', () => {
+        outputQualityVal.textContent = outputQualityInput.value + '%';
+    });
+}
 
 // ===== DOM Refs =====
 const $ = (sel) => document.querySelector(sel);
@@ -148,37 +169,9 @@ function updateProcessButton() {
     btnProcess.disabled = state.images.length === 0 || state.watermarks.length === 0;
 }
 
-// ===== Client-side Compositing =====
-function loadImage(src) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = src;
-    });
-}
+// ===== Preview =====
+let previewAbort = null;
 
-async function compositeImages(baseUrl, watermarkUrl) {
-    const [baseImg, wmImg] = await Promise.all([
-        loadImage(baseUrl),
-        loadImage(watermarkUrl),
-    ]);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = baseImg.width;
-    canvas.height = baseImg.height;
-    const ctx = canvas.getContext('2d');
-
-    // Draw base image
-    ctx.drawImage(baseImg, 0, 0);
-
-    // Draw watermark stretched to fill
-    ctx.drawImage(wmImg, 0, 0, baseImg.width, baseImg.height);
-
-    return canvas;
-}
-
-// ===== Preview (Client-side) =====
 async function updatePreview() {
     if (state.selectedImage === null || state.selectedWatermark === null) {
         previewImage.hidden = true;
@@ -186,33 +179,73 @@ async function updatePreview() {
         return;
     }
 
+    if (previewAbort) previewAbort.abort();
+    previewAbort = new AbortController();
+
     const loader = document.createElement('div');
     loader.className = 'preview-loading';
     loader.innerHTML = '<div class="spinner"></div>';
     previewContainer.appendChild(loader);
 
     try {
-        const canvas = await compositeImages(
-            state.images[state.selectedImage].url,
-            state.watermarks[state.selectedWatermark].url,
-        );
+        const formData = new FormData();
+        formData.append('image', state.images[state.selectedImage].file);
+        formData.append('watermark', state.watermarks[state.selectedWatermark].file);
+        const resizeEnabled = document.getElementById('resize-enable').checked;
+        const minSize = parseInt(document.getElementById('resize-min').value) || 1000;
+        if (resizeEnabled) formData.append('minSize', String(minSize));
+        if (outputFormatSelect) formData.append('outputFormat', outputFormatSelect.value);
+        if (outputQualityInput) formData.append('outputQuality', outputQualityInput.value);
+
+        const res = await fetch('/api/preview', {
+            method: 'POST',
+            body: formData,
+            signal: previewAbort.signal,
+        });
+
+        if (!res.ok) throw new Error('Preview failed');
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
 
         if (previewImage.src.startsWith('blob:')) {
             URL.revokeObjectURL(previewImage.src);
         }
 
-        previewImage.src = canvas.toDataURL('image/png');
+        previewImage.src = url;
         previewImage.hidden = false;
         previewPlaceholder.hidden = true;
     } catch (err) {
-        console.error('Preview error:', err);
+        if (err.name !== 'AbortError') {
+            console.error('Preview error:', err);
+        }
     } finally {
         loader.remove();
     }
 }
 
-// ===== Process & Download (Client-side with JSZip) =====
+// ===== Process & Download =====
 async function processAndDownload() {
+    const formData = new FormData();
+
+    state.images.forEach((img, i) => {
+        formData.append(`images_${i}`, img.file);
+        formData.append(`paths_${i}`, img.relativePath);
+    });
+    state.watermarks.forEach((wm, i) => {
+        formData.append(`watermarks_${i}`, wm.file);
+    });
+
+    // Send resize options
+    const resizeEnabled = document.getElementById('resize-enable').checked;
+    const minSize = parseInt(document.getElementById('resize-min').value) || 1000;
+    if (resizeEnabled) {
+        formData.append('minSize', String(minSize));
+    }
+    if (outputFormatSelect) formData.append('outputFormat', outputFormatSelect.value);
+    if (outputQualityInput) formData.append('outputQuality', outputQualityInput.value);
+
+    // Show progress
     progressSection.hidden = false;
     progressBar.style.width = '0%';
     progressLog.innerHTML = '';
@@ -220,38 +253,33 @@ async function processAndDownload() {
 
     addLogEntry('Processing images...', '');
 
+    // Animate progress bar (indeterminate-ish)
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress = Math.min(progress + 2, 90);
+        progressBar.style.width = `${progress}%`;
+    }, 200);
+
     try {
-        const zip = new JSZip();
-        const total = state.images.length * state.watermarks.length;
-        let done = 0;
+        const res = await fetch('/api/process', {
+            method: 'POST',
+            body: formData,
+        });
 
-        for (const wm of state.watermarks) {
-            const wmName = wm.file.name.replace(/\.[^.]+$/, '');
+        clearInterval(progressInterval);
 
-            for (const img of state.images) {
-                const canvas = await compositeImages(img.url, wm.url);
-
-                // Get PNG blob
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
-                // Build path: wmName/relativePath (but with .png extension)
-                const baseName = img.relativePath.replace(/\.[^.]+$/, '.png');
-                const zipPath = `${wmName}/${baseName}`;
-
-                zip.file(zipPath, blob);
-
-                done++;
-                const pct = Math.round((done / total) * 100);
-                progressBar.style.width = `${pct}%`;
-                addLogEntry(`✓ ${zipPath}`, 'success');
-            }
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Processing failed');
         }
 
-        addLogEntry('Creating ZIP...', '');
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        progressBar.style.width = '100%';
+        addLogEntry(`✓ Processing complete!`, 'success');
+        addLogEntry('Starting download...', '');
 
-        // Download
-        const url = URL.createObjectURL(zipBlob);
+        // Download the ZIP
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = 'watermarked.zip';
@@ -260,9 +288,9 @@ async function processAndDownload() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        progressBar.style.width = '100%';
-        addLogEntry(`✓ Downloaded watermarked.zip (${(zipBlob.size / 1024 / 1024).toFixed(1)} MB)`, 'done');
+        addLogEntry(`✓ Downloaded watermarked.zip (${(blob.size / 1024 / 1024).toFixed(1)} MB)`, 'done');
     } catch (err) {
+        clearInterval(progressInterval);
         addLogEntry(`Error: ${err.message}`, 'error');
     } finally {
         updateProcessButton();

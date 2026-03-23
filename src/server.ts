@@ -27,12 +27,25 @@ async function handlePreview(req: Request): Promise<Response> {
 
         const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
         const wmBuffer = Buffer.from(await watermarkFile.arrayBuffer());
+        const minSizeStr = formData.get("minSize") as string | null;
+        const minSize = minSizeStr ? parseInt(minSizeStr, 10) : 0;
 
         const metadata = await sharp(imageBuffer).metadata();
-        const { width, height } = metadata;
+        let { width, height } = metadata;
 
         if (!width || !height) {
             return Response.json({ error: "Could not read image dimensions" }, { status: 400 });
+        }
+
+        // Upscale if smaller than minSize
+        let imgBuf = imageBuffer;
+        if (minSize > 0 && (width < minSize || height < minSize)) {
+            const scale = minSize / Math.min(width, height);
+            const newW = Math.round(width * scale);
+            const newH = Math.round(height * scale);
+            imgBuf = await sharp(imageBuffer).resize(newW, newH, { fit: "fill" }).toBuffer();
+            width = newW;
+            height = newH;
         }
 
         const resizedWm = await sharp(wmBuffer)
@@ -40,14 +53,28 @@ async function handlePreview(req: Request): Promise<Response> {
             .ensureAlpha()
             .toBuffer();
 
-        const result = await sharp(imageBuffer)
+        const outputFormat = (formData.get("outputFormat") as string) || "png";
+        const outputQuality = parseInt((formData.get("outputQuality") as string) || "85", 10);
+
+        let pipeline = sharp(imgBuf)
             .ensureAlpha()
-            .composite([{ input: resizedWm, blend: "over" }])
-            .png()
-            .toBuffer();
+            .composite([{ input: resizedWm, blend: "over" }]);
+
+        let result: Buffer;
+        let contentType: string;
+        if (outputFormat === 'jpeg') {
+            result = await pipeline.jpeg({ quality: outputQuality }).toBuffer();
+            contentType = 'image/jpeg';
+        } else if (outputFormat === 'webp') {
+            result = await pipeline.webp({ quality: outputQuality }).toBuffer();
+            contentType = 'image/webp';
+        } else {
+            result = await pipeline.png().toBuffer();
+            contentType = 'image/png';
+        }
 
         return new Response(new Uint8Array(result), {
-            headers: { "Content-Type": "image/png" },
+            headers: { "Content-Type": contentType },
         });
     } catch (err) {
         return Response.json(
@@ -101,7 +128,16 @@ async function handleProcess(req: Request): Promise<Response> {
             return Response.json({ error: "No images or watermarks provided" }, { status: 400 });
         }
 
-        console.log(`Processing ${images.length} images × ${watermarks.length} watermark(s)...`);
+        // Get minSize from formData
+        const minSizeStr = formData.get("minSize") as string | null;
+        const minSize = minSizeStr ? parseInt(minSizeStr, 10) : 0;
+
+        // Get output format/quality
+        const outputFormat = (formData.get("outputFormat") as string) || "png";
+        const outputQuality = parseInt((formData.get("outputQuality") as string) || "85", 10);
+        const outExt = outputFormat === 'jpeg' ? '.jpg' : outputFormat === 'webp' ? '.webp' : '.png';
+
+        console.log(`Processing ${images.length} images × ${watermarks.length} watermark(s)...${minSize ? ` (min size: ${minSize}px)` : ''} [${outputFormat.toUpperCase()}${outputFormat !== 'png' ? ` q${outputQuality}` : ''}]`);
 
         // Build ZIP using JSZip (fully in-memory, no streams)
         const zip = new JSZip();
@@ -112,25 +148,40 @@ async function handleProcess(req: Request): Promise<Response> {
             for (const img of images) {
                 try {
                     const metadata = await sharp(img.buffer).metadata();
-                    const { width, height } = metadata;
+                    let { width, height } = metadata;
                     if (!width || !height) continue;
+
+                    // Upscale if smaller than minSize
+                    let imgBuf = img.buffer;
+                    if (minSize > 0 && (width < minSize || height < minSize)) {
+                        const scale = minSize / Math.min(width, height);
+                        const newW = Math.round(width * scale);
+                        const newH = Math.round(height * scale);
+                        imgBuf = await sharp(img.buffer).resize(newW, newH, { fit: "fill" }).toBuffer();
+                        width = newW;
+                        height = newH;
+                    }
 
                     const resizedWm = await sharp(wm.buffer)
                         .resize(width, height, { fit: "fill" })
                         .ensureAlpha()
                         .toBuffer();
 
-                    const result = await sharp(img.buffer)
+                    let pipeline = sharp(imgBuf)
                         .ensureAlpha()
-                        .composite([{ input: resizedWm, blend: "over" }])
-                        .png()
-                        .toBuffer();
+                        .composite([{ input: resizedWm, blend: "over" }]);
+
+                    let result: Buffer;
+                    if (outputFormat === 'jpeg') {
+                        result = await pipeline.jpeg({ quality: outputQuality }).toBuffer();
+                    } else if (outputFormat === 'webp') {
+                        result = await pipeline.webp({ quality: outputQuality }).toBuffer();
+                    } else {
+                        result = await pipeline.png().toBuffer();
+                    }
 
                     // Build ZIP path
-                    const outputFileName =
-                        extname(img.name).toLowerCase() !== ".png"
-                            ? basename(img.name, extname(img.name)) + ".png"
-                            : img.name;
+                    const outputFileName = basename(img.name, extname(img.name)) + outExt;
 
                     const relDir = img.relativePath.includes("/")
                         ? img.relativePath.substring(0, img.relativePath.lastIndexOf("/"))
