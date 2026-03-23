@@ -529,6 +529,43 @@ function render() {
     drawCustomImages();
     drawAllBadges();
     if (creator.storeName) drawStoreName();
+
+    // Draw selection highlight
+    if (selectedElement) {
+        let sx, sy, sw, sh;
+        if (selectedElement.type === 'badge') {
+            const b = creator.badges[selectedElement.index];
+            if (b) {
+                ctx.font = getBadgeFont();
+                const label = b.emoji ? `${b.emoji} ${b.text}` : b.text;
+                const pad = creator.badgeSize * 0.7;
+                sw = ctx.measureText(label).width + pad * 2;
+                sh = creator.badgeSize * 2.1;
+                sx = b.x; sy = b.y;
+            }
+        } else if (selectedElement.type === 'image') {
+            const img = creator.images[selectedElement.index];
+            if (img) { sx = img.x; sy = img.y; sw = img.w; sh = img.h; }
+        } else if (selectedElement.type === 'storeName') {
+            const fx = getStyleFx();
+            ctx.font = getStoreFont();
+            const text = creator.storeName.toUpperCase();
+            const pad = creator.storeSize * 0.9;
+            sw = ctx.measureText(text).width + pad * 2;
+            sh = creator.storeSize * 1.7;
+            sx = creator.storeNameX !== null ? creator.storeNameX : (SIZE - sw) / 2;
+            sy = creator.storeNameY !== null ? creator.storeNameY : creator.thickness * fx.borderExtraThickness + 8;
+        }
+        if (sx !== undefined) {
+            ctx.save();
+            ctx.strokeStyle = '#4dabf7';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(sx - 3, sy - 3, sw + 6, sh + 6);
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+    }
 }
 
 // ===== 8 Border Styles =====
@@ -1729,6 +1766,7 @@ document.getElementById('flip-v-btn')?.addEventListener('click', function() {
 
 // ===== Canvas Drag-and-Drop =====
 let dragTarget = null;
+let selectedElement = null;
 let dragOffsetX = 0, dragOffsetY = 0;
 
 function canvasToLogical(e) {
@@ -1781,11 +1819,15 @@ canvas.addEventListener('mousedown', e => {
     const hit = getHitTarget(x, y);
     if (hit) {
         dragTarget = hit;
+        selectedElement = hit;
         dragOffsetX = x - hit.obj.x;
         dragOffsetY = y - hit.obj.y;
         canvas.style.cursor = 'grabbing';
         e.preventDefault();
+    } else {
+        selectedElement = null;
     }
+    render();
 });
 
 canvas.addEventListener('mousemove', e => {
@@ -1818,6 +1860,28 @@ canvas.addEventListener('mouseup', () => {
 
 canvas.addEventListener('mouseleave', () => {
     if (dragTarget) { dragTarget = null; canvas.style.cursor = 'default'; }
+});
+
+// Delete key to remove selected element
+document.addEventListener('keydown', e => {
+    if (!selectedElement) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Don't intercept if typing in an input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+        if (selectedElement.type === 'badge') {
+            creator.badges.splice(selectedElement.index, 1);
+            renderBadgeControls();
+        } else if (selectedElement.type === 'image') {
+            creator.images.splice(selectedElement.index, 1);
+            renderImageList();
+        } else if (selectedElement.type === 'storeName') {
+            creator.storeNameX = null;
+            creator.storeNameY = null;
+        }
+        selectedElement = null;
+        render();
+        e.preventDefault();
+    }
 });
 
 // ===== Custom Image Upload =====
