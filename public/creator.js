@@ -29,6 +29,10 @@ const creator = {
     storeBold: true,
     storeItalic: false,
     storeSize: 20,
+    // Border transforms
+    borderRotate: 0,
+    borderFlipH: false,
+    borderFlipV: false,
 };
 
 const POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'bottom-center', 'top-center'];
@@ -407,6 +411,13 @@ function applyBorderEffects(drawFn) {
     const accent = fx.luxuryColors ? '#f5e6a3' : creator.accent;
 
     ctx.save();
+    // Apply border transforms (rotate/flip)
+    ctx.translate(SIZE / 2, SIZE / 2);
+    if (creator.borderRotate) ctx.rotate(creator.borderRotate * Math.PI / 180);
+    if (creator.borderFlipH) ctx.scale(-1, 1);
+    if (creator.borderFlipV) ctx.scale(1, -1);
+    ctx.translate(-SIZE / 2, -SIZE / 2);
+
     if (fx.borderDash) ctx.setLineDash(fx.borderDash);
 
     if (fx.neonGlow) {
@@ -1681,6 +1692,26 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
 }
+
+// ===== Border Transform Controls =====
+document.querySelectorAll('[data-rotate]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-rotate]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        creator.borderRotate = parseInt(btn.dataset.rotate);
+        render();
+    });
+});
+document.getElementById('flip-h-btn')?.addEventListener('click', function() {
+    creator.borderFlipH = !creator.borderFlipH;
+    this.classList.toggle('active');
+    render();
+});
+document.getElementById('flip-v-btn')?.addEventListener('click', function() {
+    creator.borderFlipV = !creator.borderFlipV;
+    this.classList.toggle('active');
+    render();
+});
 
 // Initial render
 render();

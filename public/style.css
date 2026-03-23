@@ -1051,3 +1051,16 @@ body {
   object-fit: contain;
   border-radius: var(--radius-sm);
 }
+
+.transform-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.transform-btn:hover { border-color: var(--primary); color: var(--primary); }
+.transform-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
