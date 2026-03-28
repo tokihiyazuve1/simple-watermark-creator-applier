@@ -120,6 +120,7 @@ const creator = {
     diagFont: 'Inter',
     diagBold: true,
     diagItalic: false,
+    diagSpacing: 5,
     // Badge shape
     badgeShape: 'rounded',
 };
@@ -227,6 +228,9 @@ function syncUIFromState() {
     if (diagFontSelect) diagFontSelect.value = creator.diagFont || 'Inter';
     if (diagBoldBtn) diagBoldBtn.classList.toggle('active', creator.diagBold !== false);
     if (diagItalicBtn) diagItalicBtn.classList.toggle('active', !!creator.diagItalic);
+    // Diag spacing
+    const dspEl = document.getElementById('cr-diag-spacing');
+    if (dspEl) { dspEl.value = creator.diagSpacing || 5; const v = document.getElementById('cr-diag-spacing-val'); if (v) v.textContent = creator.diagSpacing || 5; }
     renderBadgeControls();
     renderImageList();
 }
@@ -855,11 +859,12 @@ function render() {
         ctx.restore();
     }
 
+    if (creator.diagText) drawDiagonalText();
+
     drawCustomImages();
     drawAllBadges();
     if (creator.storeName) drawStoreName();
     if (creator.qrImage) drawQRCode();
-    if (creator.diagText) drawDiagonalText();
 
     // Draw crop overlay for non-square canvas presets
     const cRatio = creator.canvasW / creator.canvasH;
@@ -2245,7 +2250,7 @@ function drawDiagonalText() {
     const mainSize = creator.diagSize;
     const outSize = creator.diagOutlineSize || mainSize;
     const maxSize = Math.max(mainSize, outSize);
-    const spacing = maxSize * 5;
+    const spacing = maxSize * (creator.diagSpacing || 5);
     const diag = Math.sqrt(SIZE * SIZE * 2) * 1.5;
 
     // Measure text width for spacing
@@ -2809,6 +2814,15 @@ diagSizeInput.addEventListener('input', e => {
     render();
 });
 diagAngleSelect.addEventListener('change', e => { creator.diagAngle = parseInt(e.target.value); render(); });
+
+// Diagonal text spacing
+const diagSpacingInput = document.getElementById('cr-diag-spacing');
+const diagSpacingVal = document.getElementById('cr-diag-spacing-val');
+diagSpacingInput.addEventListener('input', e => {
+    creator.diagSpacing = parseInt(e.target.value);
+    diagSpacingVal.textContent = creator.diagSpacing;
+    render();
+});
 diagColorInput.addEventListener('input', e => { creator.diagColor = e.target.value; render(); });
 
 // Diagonal text font
